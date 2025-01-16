@@ -143,45 +143,7 @@ async fn read_and_send_data(
     
 }
 
-// async fn post_data_to_api(client: &Client, data: &[WeatherData]) {
-//     for row in data {
-//         match client
-//             .post("http://localhost:8080/weather")
-//             .json(row)
-//             .send()
-//             .await
-//         {
-//             Ok(response) => println!("Data posted successfully: {:?}", response),
-//             Err(err) => eprintln!("Error posting data: {}", err),
-//         }
-//     }
-// }
-
-// async fn get_weather(client: &Client) {
-//     match client.get("http://localhost:8080/weather").send().await {
-//         Ok(response) => match response.json::<serde_json::Value>().await {
-//             Ok(weather) => println!("Weather Data: {:?}", weather),
-//             Err(err) => eprintln!("Error parsing weather data: {}", err),
-//         },
-//         Err(err) => eprintln!("Error fetching weather data: {}", err),
-//     }
-// }
-
-// fn get_file_name_in_folder() -> String {
-//     let mut file_names = String::new();
-//     if let Ok(pond) = fs::read_dir(&FOLDER_PATH) {
-//         for entry in pond {
-//             if let Ok(entry) = entry {
-//                 // Here, entry is a DirEntry.
-//                 file_names.push_str(&format!("{:?}\n", entry.file_name()));
-//             }
-//         }
-//     }
-//     return file_names;
-// }
-
 fn get_recent_file_name_in_folder() -> String {
-    let file_names = String::new();
     let mut recent_file = String::new();
     let mut recent_time = u64::MAX;
     if let Ok(entries) = fs::read_dir(&FOLDER_PATH) {
