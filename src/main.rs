@@ -1,10 +1,9 @@
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::Read;
 use std::{fs, path::Path};
+use tokio::sync::Mutex;
+use std::sync::Arc;
 
 const FOLDER_PATH: &str = "/Users/user/Desktop/test"; // Change to your desired folder path
 const FILE_PREFIX: &str = "weather_data_";
@@ -12,108 +11,145 @@ const FILE_PREFIX: &str = "weather_data_";
 #[derive(Serialize, Deserialize, Debug)]
 struct WeatherData {
     pressure: f64,
-    relative_humidity: u32,
+    relative_humidity: f64,
     temperature: f64,
-    wind_direction: u32,
-    wind_speed: u32,
+    wind_direction: f64,
+    wind_speed: f64,
     chp1: f64,
-    direct_sun: u32,
-    global_sun: u32,
-    diffuse_sun: u32,
+    direct_sun: f64,
+    global_sun: f64,
+    diffuse_sun: f64,
     rain_fall: f64,
-    all_day_illumination: u32,
-    pm25: u32,
+    all_day_illumination: f64,
+    pm25: f64,
     timestamp: String,
 }
 
-async fn read_and_send_data(client: &Client, file_name: &str) {
+
+
+struct FileTracker {
+    last_file_name: Option<String>,
+    last_line_index: usize,
+}
+
+impl FileTracker {
+    fn new() -> Self {
+        Self {
+            last_file_name: None,
+            last_line_index: 0,
+        }
+    }
+
+    fn reset(&mut self, file_name: &str) {
+        self.last_file_name = Some(file_name.to_string());
+        self.last_line_index = 0;
+    }
+
+    fn update_last_line(&mut self, line_index: usize) {
+        self.last_line_index = line_index;
+    }
+}
+
+async fn read_and_send_data(
+    client: &reqwest::Client,
+    file_name: &str,
+    file_tracker: Arc<Mutex<FileTracker>>,
+) {
     let file_path = Path::new(FOLDER_PATH).join(file_name);
     println!("File path: {:?}", file_path);
 
-    match fs::read(&file_path) {
-        Ok(bytes) => {
-            println!("Reading file: {}", file_name);
+    if !file_path.exists() {
+        eprintln!("File not found: {:?}", file_path);
+        return;
+    }
 
-            // Interpret the file content as UTF-8
-            let content = String::from_utf8_lossy(&bytes);
-
-            // Split content into lines
-            let lines: Vec<&str> = content.lines().collect();
-
-            // Simulate reading data from the file
-            let mut data: Vec<WeatherData> = Vec::new();
-
-            // Loop through rows 18 to 44 (adjusted index: 17 to 43)
-            for row_index in 17..30 {
-                let row_content = lines.get(row_index).unwrap_or(&"");
-                let mut row_data = HashMap::new();
-                let mut has_data = false;
-
-                for (col_index, col) in ["Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "AA", "AB"]
-                    .iter()
-                    .enumerate()
-                {
-                    // Use each line content as the simulated value
-                    let simulated_value = row_content.trim(); // Line content as value
-                    if !simulated_value.is_empty() {
-                        has_data = true;
-                        row_data.insert(format!("{}{}", col, row_index + 1), simulated_value);
-                        println!("{}{}: {}", col, row_index + 1, row_data[&format!("{}{}", col, row_index + 1)]);  
-                    }
-                }
-
-                if has_data {
-                    let weather_data = WeatherData {
-                        pressure: row_data["Q"].parse::<f64>().unwrap_or(0.0),
-                        relative_humidity: row_data["R"].parse::<u32>().unwrap_or(0),
-                        temperature: row_data["S"].parse::<f64>().unwrap_or(0.0),
-                        wind_direction: row_data["T"].parse::<u32>().unwrap_or(0),
-                        wind_speed: row_data["U"].parse::<u32>().unwrap_or(0),
-                        chp1: row_data["V"].parse::<f64>().unwrap_or(0.0),
-                        direct_sun: row_data["W"].parse::<u32>().unwrap_or(0),
-                        global_sun: row_data["X"].parse::<u32>().unwrap_or(0),
-                        diffuse_sun: row_data["Y"].parse::<u32>().unwrap_or(0),
-                        rain_fall: row_data["Z"].parse::<f64>().unwrap_or(0.0),
-                        all_day_illumination: row_data["AA"].parse::<u32>().unwrap_or(0),
-                        pm25: row_data["AB"].parse::<u32>().unwrap_or(0),
-                        timestamp: Utc::now().to_rfc3339(),
-                    };
-                    data.push(weather_data);
-                } else {
-                    println!("No data found in line: {}. Stopping further processing.", row_content);
-                    break; // Stop processing if no data is found in the current line
-                }
-            }
-
-            if data.is_empty() {
-                println!("No valid data found in the file. Nothing to send.");
-                return;
-            }
-
-            for row in &data {
-                println!("{:?}", row);
-            }
-
-            // Uncomment to send data after preparing
-            /*
-            for row in &data {
-                match client
-                    .post("http://localhost:8080/weather")
-                    .json(row)
-                    .send()
-                    .await
-                {
-                    Ok(response) => println!("Data posted successfully: {:?}", response),
-                    Err(err) => eprintln!("Error posting data: {}", err),
-                }
-            }
-            */
-        }
+    let bytes = match tokio::fs::read(&file_path).await {
+        Ok(bytes) => bytes,
         Err(err) => {
             eprintln!("Failed to read file {:?}: {}", file_path, err);
+            return;
+        }
+    };
+
+    let content = String::from_utf8_lossy(&bytes);
+    let lines: Vec<&str> = content.lines().collect();
+    let mut data: Vec<WeatherData> = Vec::new();
+
+    // อ่านข้อมูลจากตัวเก็บค่า (Tracker)
+    let mut tracker = file_tracker.lock().await;
+    let start_line = if let Some(last_file_name) = &tracker.last_file_name {
+        if last_file_name == file_name {
+            tracker.last_line_index + 1 // เริ่มจากแถวถัดไป
+        } else {
+            tracker.reset(file_name); // ไฟล์ใหม่, รีเซ็ตค่า
+            17 // เริ่มที่แถวที่ 17
+        }
+    } else {
+        tracker.reset(file_name);
+        17
+    };
+
+    println!("Start processing from line {}", start_line);
+
+    for row_index in start_line..2000 {
+        if let Some(row_content) = lines.get(row_index) {
+            let row_content = row_content.trim();
+            if row_content.is_empty() {
+                println!("Skipping empty line at row {}", row_index);
+                continue;
+            }
+            println!("Processing line {}: {}", row_index, row_content);
+
+            let columns: Vec<&str> = row_content.split(',').collect();
+
+            let weather_data = WeatherData {
+                pressure: columns[16].parse::<f64>().unwrap_or(0.0),
+                relative_humidity: columns[17].parse::<f64>().unwrap_or(0.0),
+                temperature: columns[18].parse::<f64>().unwrap_or(0.0),
+                wind_direction: columns[19].parse::<f64>().unwrap_or(0.0),
+                wind_speed: columns[20].parse::<f64>().unwrap_or(0.0),
+                chp1: columns[21].parse::<f64>().unwrap_or(0.0),
+                direct_sun: columns[22].parse::<f64>().unwrap_or(0.0),
+                global_sun: columns[23].parse::<f64>().unwrap_or(0.0),
+                diffuse_sun: columns[24].parse::<f64>().unwrap_or(0.0),
+                rain_fall: columns[25].parse::<f64>().unwrap_or(0.0),
+                all_day_illumination: columns[26].parse::<f64>().unwrap_or(0.0),
+                pm25: columns[27].parse::<f64>().unwrap_or(0.0),
+                timestamp: Utc::now().to_rfc3339(),
+            };
+
+            data.push(weather_data);
+            tracker.update_last_line(row_index); // อัปเดตแถวล่าสุดที่อ่าน
+        } else {
+            println!("Row {} is out of bounds. Stopping processing.", row_index);
+            break;
         }
     }
+
+    drop(tracker); // ปลดล็อก Mutex
+
+    if data.is_empty() {
+        println!("No new data found in the file. Nothing to send.");
+        return;
+    }
+
+    for row in &data {
+        println!("{:?}", row);
+    }
+
+    // Uncomment เพื่อส่งข้อมูล
+    /*
+    for row in &data {
+        match client.post("http://localhost:8080/weather").json(row).send().await {
+            Ok(response) => println!("Data posted successfully: {:?}", response),
+            Err(err) => eprintln!("Error posting data: {}", err),
+        }
+    }
+    */
 }
+
+
+
 async fn post_data_to_api(client: &Client, data: &[WeatherData]) {
     for row in data {
         match client
@@ -177,9 +213,34 @@ fn get_recent_file_name_in_folder() -> String {
 async fn main() {
     let client = Client::new();
 
-    let _recent_file = get_recent_file_name_in_folder();
+    let file_tracker = Arc::new(Mutex::new(FileTracker::new()));
 
-    read_and_send_data(&client, &_recent_file).await;
+    // Create an interval that ticks every 1 minute
+    let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(60));
+
+    loop {
+        // Wait for the next tick
+        interval.tick().await;
+
+        // Get the most recent file
+        let recent_file = get_recent_file_name_in_folder();
+
+        // Process the file
+        if !recent_file.is_empty() {
+            println!("Processing file: {}", recent_file);
+            read_and_send_data(&client, &recent_file, file_tracker.clone()).await;
+        } else {
+            println!("No recent file found in the folder.");
+        }
+    }
+
+    // let client = Client::new();
+
+    // let _recent_file = get_recent_file_name_in_folder();
+
+    // let mut last_processed_timestamp: Option<DateTime<Utc>> = None;
+    // read_and_send_data(&client, &_recent_file, &mut last_processed_timestamp).await;
+
     // let content = read_file(_recent_file);
     // print!("{:?}", content);
 
