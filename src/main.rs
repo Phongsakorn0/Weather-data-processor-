@@ -6,7 +6,6 @@ use tokio::sync::Mutex;
 use std::sync::Arc;
 
 const FOLDER_PATH: &str = "/Users/user/Desktop/test"; // Change to your desired folder path
-const FILE_PREFIX: &str = "weather_data_";
 
 #[derive(Serialize, Deserialize, Debug)]
 struct WeatherData {
@@ -24,8 +23,6 @@ struct WeatherData {
     pm25: f64,
     timestamp: String,
 }
-
-
 
 struct FileTracker {
     last_file_name: Option<String>,
@@ -98,7 +95,7 @@ async fn read_and_send_data(
                 println!("Skipping empty line at row {}", row_index);
                 continue;
             }
-            println!("Processing line {}: {}", row_index, row_content);
+            // println!("Processing line {}: {}", row_index, row_content);
 
             let columns: Vec<&str> = row_content.split(',').collect();
 
@@ -137,55 +134,51 @@ async fn read_and_send_data(
         println!("{:?}", row);
     }
 
-    // Uncomment เพื่อส่งข้อมูล
-    /*
     for row in &data {
         match client.post("http://localhost:8080/weather").json(row).send().await {
             Ok(response) => println!("Data posted successfully: {:?}", response),
             Err(err) => eprintln!("Error posting data: {}", err),
         }
     }
-    */
+    
 }
 
+// async fn post_data_to_api(client: &Client, data: &[WeatherData]) {
+//     for row in data {
+//         match client
+//             .post("http://localhost:8080/weather")
+//             .json(row)
+//             .send()
+//             .await
+//         {
+//             Ok(response) => println!("Data posted successfully: {:?}", response),
+//             Err(err) => eprintln!("Error posting data: {}", err),
+//         }
+//     }
+// }
 
+// async fn get_weather(client: &Client) {
+//     match client.get("http://localhost:8080/weather").send().await {
+//         Ok(response) => match response.json::<serde_json::Value>().await {
+//             Ok(weather) => println!("Weather Data: {:?}", weather),
+//             Err(err) => eprintln!("Error parsing weather data: {}", err),
+//         },
+//         Err(err) => eprintln!("Error fetching weather data: {}", err),
+//     }
+// }
 
-async fn post_data_to_api(client: &Client, data: &[WeatherData]) {
-    for row in data {
-        match client
-            .post("http://localhost:8080/weather")
-            .json(row)
-            .send()
-            .await
-        {
-            Ok(response) => println!("Data posted successfully: {:?}", response),
-            Err(err) => eprintln!("Error posting data: {}", err),
-        }
-    }
-}
-
-async fn get_weather(client: &Client) {
-    match client.get("http://localhost:8080/weather").send().await {
-        Ok(response) => match response.json::<serde_json::Value>().await {
-            Ok(weather) => println!("Weather Data: {:?}", weather),
-            Err(err) => eprintln!("Error parsing weather data: {}", err),
-        },
-        Err(err) => eprintln!("Error fetching weather data: {}", err),
-    }
-}
-
-fn get_file_name_in_folder() -> String {
-    let mut file_names = String::new();
-    if let Ok(pond) = fs::read_dir(&FOLDER_PATH) {
-        for entry in pond {
-            if let Ok(entry) = entry {
-                // Here, entry is a DirEntry.
-                file_names.push_str(&format!("{:?}\n", entry.file_name()));
-            }
-        }
-    }
-    return file_names;
-}
+// fn get_file_name_in_folder() -> String {
+//     let mut file_names = String::new();
+//     if let Ok(pond) = fs::read_dir(&FOLDER_PATH) {
+//         for entry in pond {
+//             if let Ok(entry) = entry {
+//                 // Here, entry is a DirEntry.
+//                 file_names.push_str(&format!("{:?}\n", entry.file_name()));
+//             }
+//         }
+//     }
+//     return file_names;
+// }
 
 fn get_recent_file_name_in_folder() -> String {
     let file_names = String::new();
@@ -233,52 +226,4 @@ async fn main() {
             println!("No recent file found in the folder.");
         }
     }
-
-    // let client = Client::new();
-
-    // let _recent_file = get_recent_file_name_in_folder();
-
-    // let mut last_processed_timestamp: Option<DateTime<Utc>> = None;
-    // read_and_send_data(&client, &_recent_file, &mut last_processed_timestamp).await;
-
-    // let content = read_file(_recent_file);
-    // print!("{:?}", content);
-
-    // GET and POST example
-
-    // let example_weather = WeatherData {
-    //     pressure: 1013.25,
-    //     relative_humidity: 85,
-    //     temperature: 30.5,
-    //     wind_direction: 90,
-    //     wind_speed: 5,
-    //     chp1: 1.2,
-    //     direct_sun: 400,
-    //     global_sun: 800,
-    //     diffuse_sun: 200,
-    //     rain_fall: 10.5,
-    //     all_day_illumination: 1200,
-    //     pm25: 15,
-    //     timestamp: Utc::now().to_rfc3339(),
-    // };
-
-    // post_data_to_api(&client, &[example_weather]).await;
-
-    // get_weather(&client).await;
-
-    // // Schedule the task to run every minute
-    // let scheduler = JobScheduler::new().await.unwrap();
-    // scheduler
-    //     .add(
-    //         Job::new_async("* * * * * *", move |_uuid, _l| {
-    //             let client_clone = client.clone();
-    //             Box::pin(async move {
-    //                 read_and_send_data(&client_clone).await;
-    //             })
-    //         })
-    //         .unwrap(),
-    //     )
-    //     .unwrap();
-
-    // scheduler.start().await.unwrap();
 }
