@@ -5,7 +5,7 @@ use std::{fs, path::Path};
 use tokio::sync::Mutex;
 use std::sync::Arc;
 
-const FOLDER_PATH: &str = "/Users/user/Desktop/test"; // Change to your desired folder path
+const FOLDER_PATH: &str = "/C:/Cadac3/Data"; // Change to your desired folder path
 
 #[derive(Serialize, Deserialize, Debug)]
 struct WeatherData {
@@ -135,7 +135,7 @@ async fn read_and_send_data(
     }
 
     for row in &data {
-        match client.post("http://localhost:8080/weather").json(row).send().await {
+        match client.post("https://cusw-workspace.sa.chula.ac.th/api2/weather").json(row).send().await {
             Ok(response) => println!("Data posted successfully: {:?}", response),
             Err(err) => eprintln!("Error posting data: {}", err),
         }
